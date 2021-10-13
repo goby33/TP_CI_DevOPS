@@ -1,0 +1,116 @@
+version: 2.1  
+jobs:
+  build:
+    docker:
+      - image: cimg/node:16.10.0
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+            - npm-v1-dependencies
+      - run: 
+          name: Run yarn install
+          command: yarn install
+      - save_cache:
+          name: Save cache
+          key: npm-v1-dependencies-{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
+  lint:
+    docker:
+      - image: cimg/node:16.10.0
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+            - npm-v1-dependencies
+      - run: 
+          name: Run yarn lint
+          command: yarn lint
+      - run: 
+          name: Run yarn format check
+          command: yarn format:check
+  unit_test:
+    docker:
+      - image: cimg/node:16.10.0 
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+            - npm-v1-dependencies
+      - run: 
+          name: Run yarn test
+          command: yarn test
+  e2e_test:
+    docker:
+      - image: cimg/node:16.10.0
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD
+      - image: circleci/postgres:9.6-alpine
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD
+        environment:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: devops    
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+            - npm-v1-dependencies
+      - run:
+          name: Run yarn end to end test
+          environment:
+            DATABASE_URL: postgres://postgres:password@localhost:5432/devops
+          command: yarn test:e2e
+  generate_doc:
+    docker:
+      - image: cimg/node:16.10.0  
+        auth:
+          username: hgnllt
+          password: $DOCKERHUB_PASSWORD  
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - npm-v1-dependencies-{{ checksum "yarn.lock" }}
+            - npm-v1-dependencies
+      - run: 
+          name: Generate the documentation
+          command: yarn doc:build
+      - store_artifacts:
+          path: docs
+
+workflows:
+  build_test_docs:
+    jobs:
+      - build
+      - lint:
+          requires:
+            - build
+      - unit_test:
+          requires:
+            - build
+      - e2e_test:
+          requires:
+            - build
+      - generate_doc:
+          requires:
+            - lint
+            - unit_test
+            - e2e_test
